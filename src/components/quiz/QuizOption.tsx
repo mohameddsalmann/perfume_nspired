@@ -1,7 +1,9 @@
 'use client';
 
 import { motion } from 'framer-motion';
+import { Check } from 'lucide-react';
 import { QuizOption as QuizOptionType } from '@/types';
+import { RenderIcon } from '@/lib/iconRegistry';
 
 interface QuizOptionProps {
     option: QuizOptionType;
@@ -15,6 +17,15 @@ export default function QuizOption({ option, selected, onClick }: QuizOptionProp
             whileHover={{ scale: 1.02 }}
             whileTap={{ scale: 0.98 }}
             onClick={onClick}
+            role="option"
+            aria-selected={selected}
+            tabIndex={0}
+            onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    onClick();
+                }
+            }}
             className={`
                 relative p-4 border transition-all duration-200 text-left bg-white
                 ${selected
@@ -30,14 +41,14 @@ export default function QuizOption({ option, selected, onClick }: QuizOptionProp
                     animate={{ scale: 1 }}
                     className="absolute top-2 right-2 w-5 h-5 bg-[#e53935] flex items-center justify-center"
                 >
-                    <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                    </svg>
+                    <Check size={14} strokeWidth={3} className="text-white" />
                 </motion.div>
             )}
 
             {/* Icon */}
-            <span className="text-2xl mb-2 block">{option.icon}</span>
+            <span className="mb-2 block">
+                <RenderIcon name={option.icon} size={28} strokeWidth={1.5} className="text-[#1a1a1a]" />
+            </span>
 
             {/* Label */}
             <span className={`font-medium block text-sm ${selected ? 'text-[#e53935]' : 'text-[#1a1a1a]'}`}>

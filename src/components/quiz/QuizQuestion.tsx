@@ -1,7 +1,8 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { QuizStep } from '@/types';
+import { Search } from 'lucide-react';
+import { QuizStep, QuizAnswers } from '@/types';
 import QuizOption from './QuizOption';
 import NotesSelectorStep from './NotesSelectorStep';
 
@@ -9,10 +10,25 @@ interface QuizQuestionProps {
     step: QuizStep;
     value: unknown;
     onChange: (value: unknown) => void;
+    answers?: QuizAnswers;
 }
 
-export default function QuizQuestion({ step, value, onChange }: QuizQuestionProps) {
+export default function QuizQuestion({ step, value, onChange, answers }: QuizQuestionProps) {
     const [search, setSearch] = useState('');
+
+    const showSearch = step.options.length > 24;
+    const filteredOptions = useMemo(() => {
+        if (!showSearch) return step.options;
+        const q = search.trim().toLowerCase();
+        if (!q) return step.options;
+        return step.options.filter((opt) => {
+            if (opt.id === 'none') return true;
+            return (
+                opt.label.toLowerCase().includes(q) ||
+                (opt.labelAr && opt.labelAr.toLowerCase().includes(q))
+            );
+        });
+    }, [search, showSearch, step.options]);
 
     // Notes (love / avoid) steps use the dedicated selector
     if (step.name === 'favoriteNotes') {
@@ -27,11 +43,15 @@ export default function QuizQuestion({ step, value, onChange }: QuizQuestionProp
     }
     if (step.name === 'avoidedNotes') {
         const ids = Array.isArray(value) ? (value as string[]).filter((id) => id !== 'none') : [];
+        const favoriteIds = Array.isArray(answers?.favoriteNotes)
+            ? (answers.favoriteNotes as string[]).filter((id) => id !== 'none')
+            : [];
         return (
             <NotesSelectorStep
                 mode="avoid"
                 value={ids}
                 onChange={(ids) => onChange(ids)}
+                disabledNotes={favoriteIds}
             />
         );
     }
@@ -62,20 +82,6 @@ export default function QuizQuestion({ step, value, onChange }: QuizQuestionProp
     }
 
     // Default: other steps (gender, intensity)
-    const showSearch = step.options.length > 24;
-    const filteredOptions = useMemo(() => {
-        if (!showSearch) return step.options;
-        const q = search.trim().toLowerCase();
-        if (!q) return step.options;
-        return step.options.filter((opt) => {
-            if (opt.id === 'none') return true;
-            return (
-                opt.label.toLowerCase().includes(q) ||
-                (opt.labelAr && opt.labelAr.toLowerCase().includes(q))
-            );
-        });
-    }, [search, showSearch, step.options]);
-
     const handleSelect = (optionId: string) => {
         if (step.type === 'single') {
             onChange(optionId);
@@ -111,9 +117,7 @@ export default function QuizQuestion({ step, value, onChange }: QuizQuestionProp
             )}
             {showSearch && (
                 <div className="mb-5 relative">
-                    <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-[#888888]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                    </svg>
+                    <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#888888]" />
                     <input
                         value={search}
                         onChange={(e) => setSearch(e.target.value)}

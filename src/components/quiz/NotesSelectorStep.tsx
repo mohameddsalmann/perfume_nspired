@@ -2,8 +2,10 @@
 
 import { useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { Search, X, ChevronDown } from 'lucide-react';
 import { fragranceNotes, noteCategories } from '@/config/quizSteps';
-import type { QuizOption } from '@/types';
+import { RenderIcon } from '@/lib/iconRegistry';
+import type { FragranceNote } from '@/types';
 
 const MAX_LOVE_SELECTIONS = 10;
 const MAX_AVOID_SELECTIONS = 20;
@@ -11,16 +13,17 @@ const MAX_AVOID_SELECTIONS = 20;
 // Build categories with actual counts from fragranceNotes
 const categoriesWithCounts = noteCategories.map((cat) => ({
     ...cat,
-    count: (fragranceNotes as Record<string, QuizOption[]>)[cat.id]?.length ?? 0,
+    count: (fragranceNotes as Record<string, FragranceNote[]>)[cat.id]?.length ?? 0,
 }));
 
 interface NotesSelectorStepProps {
     mode: 'love' | 'avoid';
     value: string[];
     onChange: (ids: string[]) => void;
+    disabledNotes?: string[];
 }
 
-export default function NotesSelectorStep({ mode, value, onChange }: NotesSelectorStepProps) {
+export default function NotesSelectorStep({ mode, value, onChange, disabledNotes = [] }: NotesSelectorStepProps) {
     const [search, setSearch] = useState('');
     const [expandedCategory, setExpandedCategory] = useState<string | null>(categoriesWithCounts[0]?.id ?? null);
 
@@ -35,7 +38,7 @@ export default function NotesSelectorStep({ mode, value, onChange }: NotesSelect
     const selectedNotes = useMemo(() => {
         const notes: { id: string; label: string; icon: string }[] = [];
         for (const cat of categoriesWithCounts) {
-            const items = (fragranceNotes as Record<string, QuizOption[]>)[cat.id] ?? [];
+            const items = (fragranceNotes as Record<string, FragranceNote[]>)[cat.id] ?? [];
             for (const n of items) {
                 if (selectedIds.includes(n.id)) notes.push({ id: n.id, label: n.label, icon: n.icon });
             }
@@ -60,7 +63,7 @@ export default function NotesSelectorStep({ mode, value, onChange }: NotesSelect
         onChange(selectedIds.filter((id) => id !== noteId));
     };
 
-    const filterNotes = (notes: QuizOption[]) => {
+    const filterNotes = (notes: FragranceNote[]) => {
         const q = search.trim().toLowerCase();
         if (!q) return notes;
         return notes.filter(
@@ -72,6 +75,15 @@ export default function NotesSelectorStep({ mode, value, onChange }: NotesSelect
 
     const isLove = mode === 'love';
     const highlightClass = isLove ? 'text-[#e53935]' : 'text-[#c62828]';
+
+    // Check if any categories have filtered results (cheap vs. syncing useMemo deps with filterNotes)
+    const trimmedSearch = search.trim();
+    const hasAnyResults =
+        !trimmedSearch ||
+        categoriesWithCounts.some((cat) => {
+            const notes = (fragranceNotes as Record<string, FragranceNote[]>)[cat.id] ?? [];
+            return filterNotes(notes).length > 0;
+        });
 
     return (
         <div className="space-y-5">
@@ -91,11 +103,17 @@ export default function NotesSelectorStep({ mode, value, onChange }: NotesSelect
                 </p>
             </div>
 
+            {/* Conflict warning banner (BUG-01) */}
+            {mode === 'avoid' && disabledNotes.length > 0 && (
+                <div className="bg-orange-50 border border-orange-200 text-orange-800 text-sm rounded-lg px-4 py-2 mb-4 flex items-center gap-2">
+                    <span className="font-medium">Note:</span>
+                    Notes you already love are grayed out and cannot be avoided.
+                </div>
+            )}
+
             {/* Search */}
             <div className="relative">
-                <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-[#888888]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                </svg>
+                <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#888888]" />
                 <input
                     type="text"
                     value={search}
@@ -115,7 +133,7 @@ export default function NotesSelectorStep({ mode, value, onChange }: NotesSelect
                             animate={{ opacity: 1, scale: 1 }}
                             className="inline-flex items-center gap-1.5 bg-white border border-[#e0e0e0] px-3 py-1.5 text-sm"
                         >
-                            <span aria-hidden>{note.icon}</span>
+                            <RenderIcon name={note.icon} size={16} className="text-[#1a1a1a]" />
                             <span className="text-[#1a1a1a] font-medium">{note.label}</span>
                             <button
                                 type="button"
@@ -123,9 +141,7 @@ export default function NotesSelectorStep({ mode, value, onChange }: NotesSelect
                                 className="ml-1 text-[#888888] hover:text-[#1a1a1a] transition"
                                 aria-label={`Remove ${note.label}`}
                             >
-                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                </svg>
+                                <X size={12} />
                             </button>
                         </motion.span>
                     ))}
@@ -137,13 +153,25 @@ export default function NotesSelectorStep({ mode, value, onChange }: NotesSelect
                 </div>
             )}
 
+            {/* Empty search state (UX-03) */}
+            {trimmedSearch && !hasAnyResults && (
+                <div className="text-center py-8 text-gray-400">
+                    <Search size={24} className="mx-auto mb-2 opacity-40" />
+                    <p className="text-sm">No notes match &quot;{search}&quot;</p>
+                    <button onClick={() => setSearch('')} className="text-xs text-[#e53935] mt-1 underline">
+                        Clear search
+                    </button>
+                </div>
+            )}
+
             {/* Expandable categories */}
             <div className="max-h-[320px] overflow-y-auto pr-1 space-y-1">
                 <AnimatePresence>
                     {categoriesWithCounts.map((cat) => {
-                        const notes = (fragranceNotes as Record<string, QuizOption[]>)[cat.id] ?? [];
+                        const notes = (fragranceNotes as Record<string, FragranceNote[]>)[cat.id] ?? [];
                         const filtered = filterNotes(notes);
                         const isExpanded = expandedCategory === cat.id;
+                        const selectedInCategory = notes.filter(n => selectedIds.includes(n.id)).length;
 
                         if (search && filtered.length === 0) return null;
 
@@ -158,17 +186,23 @@ export default function NotesSelectorStep({ mode, value, onChange }: NotesSelect
                                     onClick={() => setExpandedCategory(isExpanded ? null : cat.id)}
                                     className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-[#f5f5f5] transition"
                                 >
-                                    <span className="font-medium text-[#1a1a1a]">{cat.label}</span>
+                                    <span className="flex items-center gap-2 font-medium text-[#1a1a1a]">
+                                        <RenderIcon name={cat.icon} size={16} className="text-[#888888]" />
+                                        {cat.label}
+                                    </span>
                                     <span className="flex items-center gap-2 text-[#888888] text-sm">
-                                        <span>{filtered.length}</span>
-                                        <svg
-                                            className={`w-4 h-4 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
-                                            fill="none"
-                                            stroke="currentColor"
-                                            viewBox="0 0 24 24"
-                                        >
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                                        </svg>
+                                        {selectedInCategory > 0 && (
+                                            <span className="text-xs bg-red-100 text-red-700 rounded-full px-2 py-0.5 font-medium">
+                                                {selectedInCategory} selected
+                                            </span>
+                                        )}
+                                        <span className="text-xs bg-gray-100 text-gray-500 rounded-full px-2 py-0.5">
+                                            {filtered.length}
+                                        </span>
+                                        <ChevronDown
+                                            size={16}
+                                            className={`transition-transform ${isExpanded ? 'rotate-180' : ''}`}
+                                        />
                                     </span>
                                 </button>
                                 <AnimatePresence>
@@ -183,23 +217,28 @@ export default function NotesSelectorStep({ mode, value, onChange }: NotesSelect
                                             <div className="p-3 flex flex-wrap gap-2 bg-[#f5f5f5]">
                                                 {filtered.map((note) => {
                                                     const selected = selectedIds.includes(note.id);
-                                                    const disabled = !selected && atLimit;
+                                                    const disabledByLimit = !selected && atLimit;
+                                                    const disabledByConflict = mode === 'avoid' && disabledNotes.includes(note.id);
+                                                    const isDisabled = disabledByLimit || disabledByConflict;
                                                     return (
                                                         <button
                                                             key={note.id}
                                                             type="button"
-                                                            onClick={() => !disabled && handleToggle(note.id)}
-                                                            disabled={disabled}
+                                                            onClick={() => !isDisabled && handleToggle(note.id)}
+                                                            disabled={isDisabled}
+                                                            title={disabledByConflict ? 'Already in your loved notes' : undefined}
                                                             className={`
                                                                 inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium transition
                                                                 ${selected
                                                                     ? 'bg-[#e53935] text-white'
                                                                     : 'bg-white text-[#1a1a1a] border border-[#e0e0e0] hover:border-[#888888]'
                                                                 }
-                                                                ${disabled ? 'opacity-50 cursor-not-allowed' : ''}
+                                                                ${disabledByConflict ? 'opacity-40 cursor-not-allowed line-through' : ''}
+                                                                ${disabledByLimit && !disabledByConflict ? 'opacity-50 cursor-not-allowed' : ''}
                                                             `}
                                                         >
-                                                            <span aria-hidden>{note.icon}</span>
+                                                            {disabledByConflict && <X size={14} className="text-red-500 mr-1" />}
+                                                            <RenderIcon name={note.icon} size={16} className={selected ? 'text-white' : 'text-[#888888]'} />
                                                             {note.label}
                                                         </button>
                                                     );

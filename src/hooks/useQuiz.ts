@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { QuizAnswers, RecommendationResult } from '@/types';
 import { quizSteps } from '@/config/quizSteps';
 import { perfumes } from '@/data/perfumes';
@@ -20,6 +20,10 @@ export function useQuiz() {
     const [isComplete, setIsComplete] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
     const [recommendations, setRecommendations] = useState<RecommendationResult[] | null>(null);
+    const [engineError, setEngineError] = useState(false);
+
+    const catalogEmpty = !perfumes || perfumes.length === 0;
+    const dataError = catalogEmpty || engineError;
 
     const setAnswer = useCallback((name: keyof QuizAnswers, value: unknown) => {
         setAnswers(prev => ({ ...prev, [name]: value }));
@@ -47,9 +51,13 @@ export function useQuiz() {
         // Simulate API delay for better UX
         await new Promise(resolve => setTimeout(resolve, 1500));
 
-        const results = calculateRecommendations(answers, perfumes);
-        setRecommendations(results);
-        setIsComplete(true);
+        try {
+            const results = calculateRecommendations(answers, perfumes);
+            setRecommendations(results);
+            setIsComplete(true);
+        } catch {
+            setEngineError(true);
+        }
         setIsLoading(false);
     }, [answers]);
 
@@ -58,15 +66,17 @@ export function useQuiz() {
         setAnswers(initialAnswers);
         setIsComplete(false);
         setRecommendations(null);
+        setEngineError(false);
     }, []);
 
-    const canProceed = useCallback(() => {
+    // Fix BUG-06: use useMemo instead of useCallback for derived state
+    const canProceed = useMemo(() => {
         const step = quizSteps[currentStep];
         const answer = answers[step.name];
 
         if (!step.required) return true;
         if (Array.isArray(answer)) return answer.length > 0;
-        return answer !== null;
+        return answer !== null && answer !== undefined;
     }, [currentStep, answers]);
 
     return {
@@ -82,6 +92,7 @@ export function useQuiz() {
         isComplete,
         isLoading,
         recommendations,
-        canProceed: canProceed()
+        canProceed,
+        dataError
     };
 }

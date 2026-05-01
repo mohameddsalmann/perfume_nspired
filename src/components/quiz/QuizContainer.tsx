@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { AnimatePresence, motion } from 'framer-motion';
+import { Home } from 'lucide-react';
 import { useQuiz } from '@/hooks/useQuiz';
 import { quizSteps } from '@/config/quizSteps';
 import QuizProgress from './QuizProgress';
@@ -23,8 +24,27 @@ export default function QuizContainer() {
         isComplete,
         isLoading,
         recommendations,
-        canProceed
+        canProceed,
+        dataError
     } = useQuiz();
+
+    // Error state (BUG-07)
+    if (dataError) {
+        return (
+            <div className="min-h-screen bg-[#f5f5f5] flex items-center justify-center">
+                <div className="text-center">
+                    <p className="text-gray-500 text-lg">Unable to load fragrance data.</p>
+                    <p className="text-gray-400 text-sm mt-2">Please refresh the page.</p>
+                    <button
+                        onClick={() => window.location.reload()}
+                        className="mt-4 px-6 py-2 bg-[#e53935] text-white text-sm font-medium hover:bg-[#c62828] transition"
+                    >
+                        Refresh
+                    </button>
+                </div>
+            </div>
+        );
+    }
 
     // Show results if complete
     if (isComplete && recommendations) {
@@ -63,9 +83,7 @@ export default function QuizContainer() {
                         href="/"
                         className="text-sm text-[#4a4a4a] hover:text-[#e53935] transition flex items-center gap-2"
                     >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
-                        </svg>
+                        <Home size={16} />
                         Home
                     </Link>
                 </div>
@@ -90,6 +108,11 @@ export default function QuizContainer() {
                     {/* Progress */}
                     <QuizProgress current={currentStep + 1} total={totalSteps} />
 
+                    {/* Screen reader announcement (UX-08) */}
+                    <div aria-live="polite" aria-atomic="true" className="sr-only">
+                        Step {currentStep + 1} of {quizSteps.length}: {step.question}
+                    </div>
+
                     {/* Question Card */}
                     <AnimatePresence mode="wait">
                         <motion.div
@@ -104,6 +127,7 @@ export default function QuizContainer() {
                                 step={step}
                                 value={answers[step.name]}
                                 onChange={(value) => setAnswer(step.name, value)}
+                                answers={answers}
                             />
                         </motion.div>
                     </AnimatePresence>

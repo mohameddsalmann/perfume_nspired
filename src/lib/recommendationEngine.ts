@@ -12,6 +12,27 @@ function normalizeNote(value: string): string {
         .trim();
 }
 
+// BUG-05 FIX: Word-boundary-aware matching instead of loose substring
+// Returns true only if the term matches at a word boundary in the note
+function wordBoundaryMatch(term: string, note: string): boolean {
+    // Exact match
+    if (term === note) return true;
+
+    // Term is a full word in the note (word boundary)
+    const escapedTerm = term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const regex = new RegExp(`\\b${escapedTerm}\\b`, 'i');
+    if (regex.test(note)) return true;
+
+    // If term is longer than note, check if note is a word in term
+    if (note.length > 2 && term.length > note.length) {
+        const escapedNote = note.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const noteRegex = new RegExp(`\\b${escapedNote}\\b`, 'i');
+        if (noteRegex.test(term)) return true;
+    }
+
+    return false;
+}
+
 // Get all terms for a note (handles multi-part notes)
 function normalizeNoteTerms(value: string): string[] {
     const label = noteIdToLabel.get(value) ?? value;
@@ -32,9 +53,7 @@ function inferIntensity(perfume: Perfume): 'light' | 'moderate' | 'strong' {
         ...perfume.notes.base
     ].map(n => n.toLowerCase());
 
-    // Strong intensity indicators
     const strongNotes = ['oud', 'leather', 'tobacco', 'saffron', 'patchouli', 'amber', 'incense'];
-    // Light intensity indicators
     const lightNotes = ['citrus', 'bergamot', 'lemon', 'lime', 'grapefruit', 'green tea', 'water', 'aquatic', 'marine'];
 
     const hasStrong = strongNotes.some(n => allNotes.some(note => note.includes(n)));
@@ -43,6 +62,19 @@ function inferIntensity(perfume: Perfume): 'light' | 'moderate' | 'strong' {
     if (hasStrong && !hasLight) return 'strong';
     if (hasLight && !hasStrong) return 'light';
     return 'moderate';
+}
+
+// BUG-04 FIX: Use explicit season ratings if present, fallback to inference
+function getSeasonScore(perfume: Perfume, season: string): number {
+    // Check for explicit season ratings in perfume data
+    if (perfume.seasons && perfume.seasons[season as keyof typeof perfume.seasons] !== undefined) {
+        const rating = perfume.seasons[season as keyof typeof perfume.seasons]!;
+        // Convert 1-10 rating to our 1-10 scale
+        return Math.max(1, Math.min(10, rating));
+    }
+
+    // Fallback to inference from notes
+    return inferSeasonScore(perfume, season);
 }
 
 // Infer season suitability from notes
@@ -84,11 +116,19 @@ function inferSeasonScore(perfume: Perfume, season: string): number {
     return Math.max(1, Math.min(10, score));
 }
 
+// Normalize display scores to 60-99% range so low matches aren't shown as 0%
+function normalizeDisplayScore(rawScore: number, minRaw: number, maxRaw: number): number {
+    if (maxRaw === minRaw) return 80; // All same score -> default
+    const ratio = (rawScore - minRaw) / (maxRaw - minRaw);
+    return Math.round(60 + ratio * 39); // Maps to 60-99
+}
+
 export function calculateRecommendations(
     answers: QuizAnswers,
     perfumeList: Perfume[]
 ): RecommendationResult[] {
     const results: RecommendationResult[] = [];
+    let eligibleCount = 0;
 
     for (const perfume of perfumeList) {
         // ============ HARD FILTERS (Exclusions) ============
@@ -100,7 +140,7 @@ export function calculateRecommendations(
             }
         }
 
-        // 2. Avoided notes filter - STRICT EXCLUSION
+        // 2. Avoided notes filter - BUG-05 FIX: word-boundary-aware matching
         if (answers.avoidedNotes.length > 0 && !answers.avoidedNotes.includes('none')) {
             const allPerfumeNotes = [
                 ...perfume.notes.top,
@@ -112,17 +152,19 @@ export function calculateRecommendations(
 
             const hasAvoidedNote = avoidedTerms.some(avoidedTerm =>
                 allPerfumeNotes.some(note =>
-                    note.includes(avoidedTerm) || avoidedTerm.includes(note)
+                    wordBoundaryMatch(avoidedTerm, note)
                 )
             );
 
             if (hasAvoidedNote) {
-                continue; // Skip this perfume entirely
+                continue;
             }
         }
 
         // 3. Stock check
         if (!perfume.inStock) continue;
+
+        eligibleCount++;
 
         // ============ SCORING (Positive Matching) ============
         let score = 0;
@@ -143,9 +185,10 @@ export function calculateRecommendations(
                 const favoriteLabel = noteIdToLabel.get(favorite) ?? favorite;
                 const terms = normalizeNoteTerms(favorite);
 
+                // BUG-05 FIX: use word-boundary matching
                 const isMatch = terms.some(term =>
                     allPerfumeNotes.some(note =>
-                        note.includes(term) || term.includes(note)
+                        wordBoundaryMatch(term, note)
                     )
                 );
 
@@ -155,7 +198,6 @@ export function calculateRecommendations(
                 }
             }
 
-            // Calculate score based on match ratio
             const matchRatio = noteMatches / answers.favoriteNotes.length;
             const noteScore = matchRatio * 40;
             score += noteScore;
@@ -165,13 +207,12 @@ export function calculateRecommendations(
                 reasons.push(`Contains ${displayNotes}`);
             }
         } else {
-            // If no favorite notes selected, give base score
             score += 20;
         }
 
-        // --- Season Match (20 points max) ---
+        // --- Season Match (20 points max) - BUG-04 FIX: use explicit ratings ---
         if (answers.season && answers.season !== 'all') {
-            const seasonScore = inferSeasonScore(perfume, answers.season);
+            const seasonScore = getSeasonScore(perfume, answers.season);
             const seasonPoints = (seasonScore / 10) * 20;
             score += seasonPoints;
 
@@ -185,7 +226,7 @@ export function calculateRecommendations(
                 reasons.push(`Perfect for ${seasonNames[answers.season]}`);
             }
         } else {
-            score += 15; // Neutral for "all seasons"
+            score += 15;
         }
 
         // --- Intensity Match (20 points max) ---
@@ -208,36 +249,61 @@ export function calculateRecommendations(
         if (perfume.gender === answers.gender) {
             score += 10;
         } else if (perfume.gender === 'unisex') {
-            score += 5; // Partial bonus for unisex
+            score += 5;
         }
 
         // --- Inspired by bonus (5 points) ---
-        if (perfume.inspiredBy && perfume.inspiredBy !== 'nspired beauty') {
+        if (perfume.inspiredBy && perfume.inspiredBy !== 'nspired beauty' && perfume.inspiredBy.trim() !== '') {
             score += 5;
             reasons.push(`Inspired by ${perfume.inspiredBy}`);
         }
 
-        // --- Rich note profile bonus (5 points) ---
+        // --- Rich note profile bonus / few-note penalty ---
         const totalNotes = perfume.notes.top.length + perfume.notes.middle.length + perfume.notes.base.length;
         if (totalNotes >= 6) {
             score += 5;
+        } else if (totalNotes < 3) {
+            // Penalize perfumes with very few notes - harder to match precisely
+            score -= 5;
         }
-
-        // Calculate normalized score (max ~100)
-        const normalizedScore = Math.min(Math.round(score), 99);
 
         // Only include if score is reasonable
         if (score >= 20) {
             results.push({
                 perfume,
-                matchScore: normalizedScore,
+                matchScore: Math.round(score), // raw score, will normalize below
                 matchReasons: reasons.slice(0, 4)
             });
         }
     }
 
-    // Sort by score descending, return top 6
-    return results
-        .sort((a, b) => b.matchScore - a.matchScore)
-        .slice(0, 6);
+    // Sort by raw score descending
+    results.sort((a, b) => b.matchScore - a.matchScore);
+
+    // Normalize display scores to 60-99% range
+    const topResults = results.slice(0, 6);
+    if (topResults.length > 0) {
+        const rawScores = topResults.map(r => r.matchScore);
+        const minRaw = Math.min(...rawScores);
+        const maxRaw = Math.max(...rawScores);
+
+        for (const result of topResults) {
+            result.matchScore = normalizeDisplayScore(result.matchScore, minRaw, maxRaw);
+        }
+    }
+
+    // Dev logging
+    if (process.env.NODE_ENV === 'development') {
+        console.log('[RecommendationEngine] Results:', {
+            eligibleCount,
+            totalResults: results.length,
+            topScores: topResults.map(r => ({
+                name: r.perfume.name,
+                score: r.matchScore,
+                reasons: r.matchReasons
+            }))
+        });
+    }
+
+    return topResults;
 }

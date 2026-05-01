@@ -2,15 +2,17 @@
 
 import Link from 'next/link';
 import { motion } from 'framer-motion';
+import { Home, Frown } from 'lucide-react';
 import { RecommendationResult } from '@/types';
 import PerfumeCard from './PerfumeCard';
 
 interface QuizResultsProps {
     recommendations: RecommendationResult[];
     onRetake: () => void;
+    eligibleCount?: number;
 }
 
-export default function QuizResults({ recommendations, onRetake }: QuizResultsProps) {
+export default function QuizResults({ recommendations, onRetake, eligibleCount }: QuizResultsProps) {
     if (recommendations.length === 0) {
         return (
             <div className="min-h-screen bg-white flex items-center justify-center p-4">
@@ -20,9 +22,7 @@ export default function QuizResults({ recommendations, onRetake }: QuizResultsPr
                     className="bg-white border border-[#e0e0e0] p-8 text-center max-w-md"
                 >
                     <div className="w-16 h-16 bg-[#f5f5f5] rounded-full flex items-center justify-center mx-auto mb-6">
-                        <svg className="w-8 h-8 text-[#888888]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                        </svg>
+                        <Frown size={32} className="text-[#888888]" />
                     </div>
                     <h2 className="text-xl font-medium text-[#1a1a1a] mb-2">No Perfect Match Found</h2>
                     <p className="text-[#4a4a4a] text-sm mb-6">
@@ -59,9 +59,7 @@ export default function QuizResults({ recommendations, onRetake }: QuizResultsPr
                         href="/"
                         className="text-sm text-[#4a4a4a] hover:text-[#e53935] transition flex items-center gap-2"
                     >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
-                        </svg>
+                        <Home size={16} />
                         Home
                     </Link>
                 </div>
@@ -82,7 +80,10 @@ export default function QuizResults({ recommendations, onRetake }: QuizResultsPr
                             Your <span className="font-semibold">Perfect Matches</span>
                         </h2>
                         <p className="text-[#4a4a4a]">
-                            Based on your preferences, here are our top recommendations
+                            Based on your preferences, here are our top {recommendations.length} recommendations
+                            {eligibleCount !== undefined && (
+                                <span className="text-[#888888]"> from {eligibleCount} eligible perfumes</span>
+                            )}
                         </p>
                     </motion.div>
 

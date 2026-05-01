@@ -17,7 +17,16 @@ export interface Perfume {
     middle: string[];
     base: string[];
   };
-  attributes?: PerfumeAttributes; // Optional - not all perfumes have this
+  attributes?: PerfumeAttributes;
+  seasons?: {
+    spring?: number;
+    summer?: number;
+    fall?: number;
+    winter?: number;
+  };
+  longevity?: 'weak' | 'moderate' | 'long' | 'very long';
+  sillage?: 'intimate' | 'moderate' | 'strong' | 'enormous';
+  rating?: number; // 1-5
 }
 
 export interface PerfumeAttributes {
@@ -73,8 +82,23 @@ export interface QuizOption {
   id: string;
   label: string;
   labelAr: string;
-  icon: string;
+  icon: string; // Lucide icon name (e.g. "User", "Flower2")
   description?: string;
+}
+
+export interface FragranceNote {
+  id: string;
+  label: string;
+  labelAr: string;
+  icon: string; // Lucide icon name
+}
+
+export interface NoteCategory {
+  id: string;
+  label: string;
+  labelAr: string;
+  icon: string; // Lucide icon name
+  description: string;
 }
 
 export interface RecommendationResult {
